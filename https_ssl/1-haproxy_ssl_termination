@@ -1,0 +1,38 @@
+cat > setup_haproxy_ssl.sh << 'EOF'
+#!/bin/bash
+
+# 1. Config file already created (1-haproxy_ssl_termination)
+
+# 2. Install HAProxy
+apt-get update
+apt-get install -y haproxy
+
+# 3. Update config file with correct subdomain
+sed -i 's/www.holberton.online/samueldevopslab.tech/g' 1-haproxy_ssl_termination
+
+# 4. Get SSL certificate
+apt-get install -y certbot
+service nginx stop
+certbot certonly --standalone -d samueldevopslab.tech
+
+# 5. Combine certificate files
+mkdir -p /etc/haproxy/certs
+cat /etc/letsencrypt/live/samueldevopslab.tech/fullchain.pem \
+    /etc/letsencrypt/live/samueldevopslab.tech/privkey.pem \
+    > /etc/haproxy/certs/samueldevopslab.tech.pem
+chmod 600 /etc/haproxy/certs/samueldevopslab.tech.pem
+
+# 6. Setup backend web server
+apt-get install -y nginx
+echo "Holberton School for the win!" > /var/www/html/index.html
+service nginx start
+
+# 7. Apply the configuration
+cp 1-haproxy_ssl_termination /etc/haproxy/haproxy.cfg
+haproxy -c -f /etc/haproxy/haproxy.cfg
+service haproxy restart
+
+# 8. Test
+echo "Testing HTTPS..."
+curl https://samueldevopslab.tech
+EOF
