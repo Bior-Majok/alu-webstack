@@ -1,38 +1,55 @@
-cat > setup_haproxy_ssl.sh << 'EOF'
-#!/bin/bash
+global
+    log /dev/log    local0
+    log /dev/log    local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
 
-# 1. Config file already created (1-haproxy_ssl_termination)
+    ca-base /etc/ssl/certs
+    crt-base /etc/ssl/private
 
-# 2. Install HAProxy
-apt-get update
-apt-get install -y haproxy
+    ssl-default-bind-ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384
+    ssl-default-bind-options no-sslv3 no-tlsv10 no-tlsv11
+    tune.ssl.default-dh-param 2048
 
-# 3. Update config file with correct subdomain
-sed -i 's/www.holberton.online/samueldevopslab.tech/g' 1-haproxy_ssl_termination
+defaults
+    log     global
+    mode    http
+    option  httplog
+    option  dontlognull
+    timeout connect 5000
+    timeout client  50000
+    timeout server  50000
+    errorfile 400 /etc/haproxy/errors/400.http
+    errorfile 403 /etc/haproxy/errors/403.http
+    errorfile 408 /etc/haproxy/errors/408.http
+    errorfile 500 /etc/haproxy/errors/500.http
+    errorfile 502 /etc/haproxy/errors/502.http
+    errorfile 503 /etc/haproxy/errors/503.http
+    errorfile 504 /etc/haproxy/errors/504.http
 
-# 4. Get SSL certificate
-apt-get install -y certbot
-service nginx stop
-certbot certonly --standalone -d samueldevopslab.tech
+frontend http-in
+    bind *:80
+    redirect scheme https code 301 if !{ ssl_fc }
 
-# 5. Combine certificate files
-mkdir -p /etc/haproxy/certs
-cat /etc/letsencrypt/live/samueldevopslab.tech/fullchain.pem \
-    /etc/letsencrypt/live/samueldevopslab.tech/privkey.pem \
-    > /etc/haproxy/certs/samueldevopslab.tech.pem
-chmod 600 /etc/haproxy/certs/samueldevopslab.tech.pem
+frontend https-in
+    bind *:443 ssl crt /etc/haproxy/certs/www.samueldevopslab.tech.pem
+    reqadd X-Forwarded-Proto:\ https
+    acl letsencrypt-acl path_beg /.well-known/acme-challenge/
+    use_backend letsencrypt-backend if letsencrypt-acl
+    default_backend web-backend
 
-# 6. Setup backend web server
-apt-get install -y nginx
-echo "Holberton School for the win!" > /var/www/html/index.html
-service nginx start
+backend web-backend
+    balance roundrobin
+    option forwardfor
+    http-request set-header X-Forwarded-Port %[dst_port]
+    http-request add-header X-Forwarded-Proto https if { ssl_fc }
+    option httpchk HEAD / HTTP/1.1\r\nHost:localhost
+    server 6798-web-01 44.204.63.219:80 check
+    server 6798-web-02 3.95.255.133:80 check
 
-# 7. Apply the configuration
-cp 1-haproxy_ssl_termination /etc/haproxy/haproxy.cfg
-haproxy -c -f /etc/haproxy/haproxy.cfg
-service haproxy restart
-
-# 8. Test
-echo "Testing HTTPS..."
-curl https://samueldevopslab.tech
-EOF
+backend letsencrypt-backend
+    server letsencrypt 127.0.0.1:54321
