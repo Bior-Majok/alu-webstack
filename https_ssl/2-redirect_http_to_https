@@ -35,7 +35,7 @@ defaults
 
 frontend lb-frontend
         bind *:80
-        bind *:443 ssl crt /etc/letsencrypt/live/www.principie.tech/my_www_pem.pem
+        bind *:443 ssl crt /etc/letsencrypt/live/www.samueldevopslab.tech/my_www_pem.pem
         mode http
 
         # Define path for lets encrypt
